@@ -1,0 +1,96 @@
+---
+title: "IPUMS Extract"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+```{r env}
+library(tidyverse)
+library(ipumsr)
+
+```
+
+
+Trial Extraction
+```{r ipumsr}
+# Set API Key (be sure to set it using Sys.setenv
+set_ipums_api_key(Sys.getenv("IPUMS_KEY"), save=TRUE, overwrite=TRUE)
+
+# Create Request
+nhgis_extract_request <- ipumsr::define_extract_nhgis(
+  description = 'NHGIS Data via IPUMS API',
+  datasets = ipumsr::ds_spec(
+    #'1990_STF1',
+    '2000_SF1b',
+    data_tables = c('NP1','NP2','NP3','NP4'),
+    geog_levels = 'tract'#,
+    #years = c('1990', '2000', '2010')
+  )
+)
+
+# Submit & Download Request
+submitted_extract <- ipumsr::submit_extract(nhgis_extract_request)
+downloadable_extract <- wait_for_extract(submitted_extract)
+# if(!dir.exists('data'))
+#   dir.create('data')
+path_to_data_files <- download_extract(downloadable_extract, download_dir = 'data/', overwrite =TRUE)
+
+# Extract file (manually)
+## ??
+
+# access data
+trial_df <- read_csv('data/nhgis0001_csv/nhgis0001_ds120_1990_tract.csv')
+
+trial_df$GISJOIN %>% substr(2, 6)
+
+trial_df %>% View()
+
+trial_df <- read_csv('data/nhgis0002_csv/nhgis0002_ds120_1990_tract.csv')
+
+```
+
+## Identifying which columns I want:
+
+### Time-Series
+
+###
+
+
+
+
+
+```{r}
+# Get tract geometries from tidycensus
+alameda_tracts <- tidycensus::get_acs(state='California', county = 'alameda', geography = 'tract', geometry = TRUE, variables = 'B19013_001')
+
+# Get alameda county spend for the past year (from replica)
+test.df <- read_csv('data/trends-spend-home-v2_from-month-of-2023-08-01-to-month-of-2024-07-31--full-week_alameda/trends-spend-home-v2_from-month-of-2023-08-01-to-month-of-2024-07-31--full-week_alameda.csv')
+
+test.df %>% names()
+
+alameda_spend.tract <- test.df %>%
+  select(GEOID = geo_id, geo_name, population, month_starting, entertainment_recreation_spend_total, retail_spend_offline) %>%
+  # Change month
+  mutate(ym = substr(month_starting, 1, 7)) %>%
+  #pivot_wider(id_cols=c(GEOID, geo_name, population), names_from = 'month', values_from = c('entertainment_recreation_spend_total', 'retail_spend_offline'), names_sep = '___') %>%
+  pivot_longer(cols = c(entertainment_recreation_spend_total, retail_spend_offline), names_to = 'metric') %>%
+  select(-month_starting) %>%
+  pivot_wider(names_from = 'ym') %>% 
+  mutate(metric = case_when(metric == 'entertainment_recreation_spend_total' ~ 'entertainment', 
+                            metric =='retail_spend_offline' ~ 'retail')) %>%
+  mutate(across(where(is.numeric), \(x) x/population))
+
+# Test join together
+alameda_tracts %>% # 379
+  left_join(
+    alameda_spend.tract %>%
+      filter(metric == 'entertainment'), # 722
+    by = 'GEOID'
+  ) %>%
+  #sf::as_Spatial() %>%
+  ggplot(aes(fill = `2023-09`)) + 
+  #ggplot(aes(fill = estimate)) + 
+  geom_sf() + 
+  coord_sf(xlim = c(-122.4, -122.05), ylim = c(37.7, 37.9))
+```
+

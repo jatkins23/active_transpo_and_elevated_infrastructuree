@@ -1,0 +1,28 @@
+---
+title: "1.1.2_replica_load_bg_data"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(tidyverse)
+
+```
+
+Load BG OD Pairs
+```{r}
+BG_FILE_PATH <- 'data/replica_downloads/OD_trip_mode_share_bg_202402-202406_fullBay/OD_trip_mode_share_bg_202402-202406_fullBay.csv'
+
+df.od_pairs.bg <- read_csv(BG_FILE_PATH)
+
+
+bay_area_geo_ids <- df.od_pairs.bg$origin_geo_id %>% unique()
+
+df.od_pairs.bg.intra <- df.od_pairs.bg[df.od_pairs.bg$destination_geo_id %in% bay_area_geo_ids,]
+
+df.od_pairs.bg.intra
+```
+
+Load BG 2 
+```

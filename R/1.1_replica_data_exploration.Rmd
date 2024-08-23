@@ -1,0 +1,112 @@
+---
+title: "1.1 Replica Data"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+# Explore Replica Datasets
+
+```{r}
+alameda_weekday_spend <- read_csv('data/trends-spend-merchant-v2_from-month-of-2019-01-01-to-month-of-2024-07-31--weekday_alameda')
+
+bay_area_od_trips <- read_csv('data/trends-trip-count-od-origin-v2--mode_from-month-of-2024-02-01-to-month-of-2024-06-30--weekend_sfohc/trends-trip-count-od-origin-v2--mode_from-month-of-2024-02-01-to-month-of-2024-06-30--weekend_sfohc.csv')
+
+bay_area_od_trips # 7.69M rows
+
+# Get unique counties for bay area
+BAY_AREA_COUNTIES_FIPS <- bay_area_od_trips$origin_geo_id %>% substr(1,5) %>% unique() # "06013" "06001" "06081" "06075" "06041"
+EASTBAY_COUNTIES_FIPS <- c('06013', '06001')# "06081" "06075" "06041"
+
+bay_area_od_trips.intra <- bay_area_od_trips %>%
+  filter(substr(destination_geo_id, 1,5) %in% BAY_AREA_COUNTIES_FIPS)
+
+bay_area_od_trips.intra # 3.5M rows
+
+# Get Census tract geographies
+CA_tracts <- sf::read_sf('data/replica-bulk-census-geographies-cal-nev/trct.geojson')
+
+# bay_area_od_trips.intra
+bay_area_od_trips.intra.grpd <- 
+  bay_area_od_trips.intra %>%
+  group_by(origin_geo_id, destination_geo_id) %>%
+  summarize(across(ends_with('_count'), \(x) sum(x, na.rm=T)))
+
+bay_area_tracts.ods <- 
+  CA_tracts %>%
+  inner_join(
+    bay_area_od_trips.intra.grpd,
+    by = c('id' = 'origin_geo_id')
+  )
+
+bay_area_tracts.ods %>%
+  ggplot(aes(fill = biking_trip_count)) + 
+  geom_sf() #+ 
+  #coord_sf(xlim = c(-122.4, -122.05), ylim = c(37.7, 37.9))
+
+  
+```
+
+
+
+Ok, so my goal is to look at tract->tract active transportation trips
+
+Data Source: Replica
+
+Scope:
+  - 4 month period Feb-July (2024)
+  - within the SF-Oakland-Hayward MSA (probably easier to jsut look at east bay)
+  
+  
+Data Files:
+  - tract geogrpahies: Replica
+  - O-D pairs: Replica
+  - Demographic controls: Census/IPUMS
+  - Elevated infrastructure: TIGER
+    - Primary Road: MTFCC = 'S1100'
+    - BART lines
+  - Route-generation: ??
+  
+
+Infrastructure List:
+  - BART (everywhere from Hopkins north, Alcatraz south to 47th, thru West Oakland, etc) - note, the presence of the Ohlone greenway probably complicates this
+  - I-80, I-880, I-570, I-980, CA-13, CA-24, I-680, 101
+  - 2) CA-13, CA-123, 
+  
+  
+Infrastructure decision points:
+  - I think I want to make a tier list, and run the same analysis with multiple tiers
+    - 1) interstates and elevated state highways
+    - 2) BART and surface-level state highways
+    - 3) ...?
+    
+    
+It may be easy enough to just create sectors of the East Bay that are segmented (divided) by these infrastructure segements and then just use a binary on if the tracts are adjacent or 
+
+
+Data Needs:
+  - Distance between block groups (crow flies -- this is an opportunity for future study)
+  
+  
+Additional Data Options:
+  - Walk Score?
+  -  
+  
+## Limit to just the East Bay
+Explore how much 
+```{r explore dpet}
+eb_od_trips <- 
+  bay_area_od_trips %>%
+  # substr(geoid, 1, 5) == fips5
+  filter(substr(destination_geo_id, 1, 5) %in% EASTBAY_COUNTIES_FIPS, substr(origin_geo_id, 1, 5) %in% EASTBAY_COUNTIES_FIPS)
+
+eb_od_trips # 1.369M total O-D pairs (4 months so more like 342k)
+eb_od_trips %>% distinct(origin_geo_id, destination_geo_id) # 314k
+
+eb_od_trips %>% 
+  group_by(origin_geo_id, destination_geo_id) %>%
+  summarize(across(ends_with('_trip_count'), \(x) sum(x, na.rm=T))) %>%
+  mutate(active_trip_count = walking_trip_count + biking_trip_count) %>%
+  filter(active_trip_count > 0) # 30,728
+
+# So only 10% of O-D pairs have any active trips between them. That's probably reasonable. Let's go back and add back in SF
+```

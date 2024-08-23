@@ -1,0 +1,178 @@
+---
+title: "Join Map Inputs"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+
+```{r}
+# isolated_areas <- read_sf('mapping/generated/isolated_areas.shp')
+# 
+# # Project to correct CRS
+# isolated_areas <- isolated_areas %>% st_transform(st_crs('WGS84'))
+# 
+# # Add a UID
+# isolated_areas <- tibble::rowid_to_column(isolated_areas, 'ID')
+# 
+# # Conduct the join. Note: 1:1 with largest=TRUE
+# CA_tracts %>%
+#   sf::st_join(
+#     isolated_areas %>% 
+#       select(geometry, ID),
+#     left = TRUE,
+#     largest = TRUE
+#   )
+# 
+# sf::st_inde
+
+```
+
+Load tracts2isolated_areas
+```{r}
+tracts2isolated_areas <- read_sf('mapping/generated/tracts2isolated_areas.shp')
+
+tracts_linked <- tracts2isolated_areas %>%
+  select(STATEFP, COUNTYFP, TRACTCE, GEOID, NAME, ALAND, area_id = id, geometry)
+```
+
+Join the tracts file from census to the tracts file from Replica
+
+```{r}
+COUNTYS_OF_INTEREST <- paste0('06', tracts_linked$COUNTYFP %>% unique() )
+
+CA_tracts %>%
+  filter(substr(id, 1, 5) %in% COUNTYS_OF_INTEREST) %>% # 1,296 
+  group_by(substr(id, 1, 5)) %>%
+  summarize(n())
+  #ggplot(aes(fill = ))
+# Replica Tracts
+
+tracts_linked %>% # 1,447
+  left_join(
+    CA_tracts %>% st_drop_geometry(),
+    by = c('GEOID' = 'id') # 1,143
+  ) %>%
+  group_by(COUNTYFP) %>%
+  summarize(in_census = n(), in_replica = sum(is.na(name)))
+
+tracts_linked %>%
+  inner_join(
+    ,
+    by = c('GEOID' = 'origin_geo_id')
+  )
+
+bay_area_od_trips.intra.grpd %>%
+  # Join origins to get area_id
+  inner_join(
+    tracts_linked %>%
+      st_drop_geometry() %>%
+      select(GEOID, origin_area_id = area_id),
+    by = c('origin_geo_id' = 'GEOID')
+  ) %>%
+  # Join destinations to get area_id
+  inner_join(
+    tracts_linked %>%
+      st_drop_geometry() %>%
+      select(GEOID, destination_area_id = area_id),
+    by = c('destination_geo_id' = 'GEOID')
+  ) %>%
+  group_by(origin_area_id == destination_area_id) %>%
+  summarize(
+    n = n(), 
+    origin_population = sum(origin_population),
+    drive_trips = sum(private_auto_trip_count), 
+    bike_trips = sum(biking_trip_count),
+    walk_trips = sum(walking_trip_count)
+  ) %>% 
+  mutate(
+    active_share = (walk_trips + bike_trips)/(walk_trips + bike_trips + drive_trips)
+  ) %>%
+  arrange(desc(active_share))
+  
+# area_id =   
+
+
+#Confirm that the the Replica tracts match the replica tracts
+bay_area_od_trips.intra.grpd %>% inner_join(CA_tracts, by = c('origin_geo_id' = 'id')) %>% nrow() # 891,853
+bay_area_od_trips.intra.grpd %>% inner_join(CA_tracts, by = c('destination_geo_id' = 'id')) %>% nrow() # 891,853
+bay_area_od_trips.intra.grpd %>% left_join(CA_tracts, by = c('destination_geo_id' = 'id')) %>% nrow() # 891,853
+
+
+
+
+```
+
+
+Load Census Tract (Population-weighted) Centroids
+```{r}
+
+CA_tract_centroids <- 
+  read_csv('data/ca_tract_centroids.txt') %>%
+  sf::st_as_sf(coords = c('LATITUDE','LONGITUDE')) %>%
+  sf::st_set_crs(st_crs('WGS84'))
+  
+# Add GEOID column
+CA_tract_centroids <- 
+  CA_tract_centroids %>%
+  mutate(
+    GEOID = paste0(STATEFP, COUNTYFP, TRACTCE),
+    fips5 = paste0(STATEFP, COUNTYFP)
+  ) %>%
+  select(GEOID, fips5, everything())
+
+# 
+CA_tract_centroids.filtered <- 
+  CA_tract_centroids %>%
+  filter(fips5 %in% COUNTYS_OF_INTEREST)
+
+CA_tract_centroids.filtered
+  
+
+# Calculate Distance
+st_distance(CA_tract_centroids, CA_tract_centroids, by_element=TRUE)
+for(gid in CA_tract_centroids) {
+  print(GEOID)
+}
+
+```
+
+Areas by population
+```{r}
+tracts_linked %>%
+  inner_join(
+    bay_area_od_trips.intra %>% 
+      distinct(origin_geo_id, origin_population),
+    by = c('GEOID' = 'origin_geo_id')
+  ) %>%
+  group_by(area_id) %>%
+  summarize(population = sum(origin_population)) %>%
+  arrange(desc(population)) %>%
+  head(10) %>%
+  ggplot(aes(fill = population, label = area_id)) + 
+  geom_sf(data = tracts_linked, fill = '#efefef') + 
+  geom_sf() + 
+  geom_sf_text()
+
+tracts_linked %>%
+  # inner_join(
+  #   CA_tracts %>% st_drop_geometry(),
+  #   by = c('GEOID' = 'id')
+  # ) %>%
+  ggplot() + 
+  geom_sf(data = tracts_linked, fill = '#efefef') + 
+  geom_sf(fill = 'dodgerblue2')
+    
+```
+
+Calculate Distance
+```{r}
+tracts_lin
+
+```
